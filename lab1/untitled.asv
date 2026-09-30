@@ -1,0 +1,120 @@
+clc; clear; close all;
+
+%% 1. Параметры синтеза
+Fs = 44100;          % Частота дискретизации
+T_total = 5;         % Общая длительность фрагмента (секунды) - первые 5 секунд темы
+
+% --- Ноты основной темы "He's a Pirate" (D minor) ---
+% Формат: [Частота_Гц, Длительность_сек]
+% Мы берем самый узнаваемый кусок начала
+notes_data = [
+    293.66, 0.25;   % D4 (Ре первой октавы) - короткая
+    293.66, 0.25;   % D4
+    440.00, 0.25;   % A4 (Ля первой октавы)
+    349.23, 0.25;   % F4 (Фа первой октавы)
+    329.63, 0.25;   % E4 (Ми первой октавы)
+    293.66, 0.50;   % D4 (длинная нота)
+    
+    277.18, 0.25;   % C#4 (До-диез)
+    293.66, 0.25;   % D4
+    440.00, 0.25;   % A4
+    349.23, 0.25;   % F4
+    329.63, 0.25;   % E4
+    293.66, 0.50;   % D4
+    
+    293.66, 0.25;   % D4
+    293.66, 0.25;   % D4
+    440.00, 0.25;   % A4
+    349.23, 0.25;   % F4
+    329.63, 0.25;   % E4
+    293.66, 0.50;   % D4
+    
+    277.18, 0.25;   % C#4
+    293.66, 0.25;   % D4
+    369.99, 0.25;   % F#4
+    329.63, 0.25;   % E4
+    293.66, 0.75    % D4 (финальная длинная)
+];
+
+num_notes = size(notes_data, 1);
+total_samples = sum(round(notes_data(:,2) * Fs));
+signal_clean = zeros(total_samples, 1);
+
+pos = 1;
+
+%% 2. Цикл генерации сигнала
+for i = 1:num_notes
+    f0 = notes_data(i, 1);      % Текущая частота
+    dur_sec = notes_data(i, 2); 
+    
+    N_note = round(dur_sec * Fs);
+    t_vec = (0:N_note-1)' / Fs; 
+    
+    tone = sin(2*pi*f0*t_vec) ...
+         + 0.4*sin(2*pi*2*f0*t_vec) ...
+         + 0.2*sin(2*pi*3*f0*t_vec) ...
+         + 0.1*sin(2*pi*4*f0*t_vec);
+         
+    env = ones(N_note, 1);
+    attack_len = min(round(0.01*Fs), N_note);
+    release_len = min(round(0.05*Fs), N_note); 
+    
+    if attack_len > 1
+        env(1:attack_len) = linspace(0, 1, attack_len)';
+    end
+    if release_len > 1 && (N_note - release_len + 1) > attack_len
+        env(end-release_len+1:end) = linspace(1, 0, release_len)';
+    end
+    
+    note_signal = tone .* env;
+    
+    signal_clean(pos : pos + N_note - 1) = note_signal;
+    pos = pos + N_note;
+end
+
+signal_clean = signal_clean / max(abs(signal_clean)) * 0.8;
+
+sound(signal_clean, Fs);
+pause(1);
+
+t_plot = (0:length(signal_clean)-1)/Fs;
+
+figure('Name', 'Тема Пиратов (Ручной синтез)');
+subplot(2,1,1);
+plot(t_plot, signal_clean, 'b', 'LineWidth', 1);
+grid on; xlabel('Время, с'); ylabel('Амплитуда');
+title('Сигнал во времени');
+xlim([0 2]);
+
+N_win = 4096;
+mid_idx = floor((length(signal_clean) - N_win)/2) + 1;
+seg = signal_clean(mid_idx : mid_idx + N_win - 1);
+
+[Amp, fa] = manual_dft(seg, Fs);
+Amp_db = 20*log10(Amp + eps);
+
+subplot(2,1,2);
+semilogx(fa(2:end), Amp_db(2:end), 'r', 'LineWidth', 1.5);
+grid on; xlabel('Частота, Гц'); ylabel('Амплитуда, дБ');
+title('Амплитудный спектр фрагмента');
+xlim([100 2000]); ylim([-60 10]);
+
+bw = fa(find(Amp >= 0.05*max(Amp), 1, 'last'));
+fprintf('\nШирина спектра (уровень >5%% от макс): %.2f Гц\n', bw);
+
+
+function [Amp, fa] = manual_dft(x, fs)
+    x = x(:);
+    N = length(x);
+    k = (0:floor(N/2))';
+    n = 0:N-1;
+    ang = 2*pi*k*n/N;
+    R = cos(ang)*x;
+    I = -sin(ang)*x;
+    Amp = sqrt(R.^2 + I.^2) * 2/N;
+    Amp(1) = Amp(1)/2;
+    if mod(N,2)==0
+        Amp(end)=Amp(end)/2;
+    end
+    fa = k*fs/N;
+end
