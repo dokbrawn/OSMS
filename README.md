@@ -61,4 +61,5 @@ end
 ## Контакты
 
 GitHub: [@dokbrawn](https://github.com/dokbrawn)
-tanisimov2006@gmail.com
+
+Email: tanisimov2006@gmail.com
